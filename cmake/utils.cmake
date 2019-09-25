@@ -1,13 +1,17 @@
 function(add_shader_compile_target TARGET_NAME SHADER_FILES)
 	set(GLSLANG_VALIDATOR "glslangValidator")
+	set(SPIRV_CROSS "spirv-cross")
+
+	set(SPIRV_BINARY_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/shaders")
 
 	foreach(SHADER_FILE ${SHADER_FILES})
 		get_filename_component(FILE_NAME ${SHADER_FILE} NAME)
 		get_filename_component(FILE_DIR ${SHADER_FILE} DIRECTORY)
-		set(SPIRV_FILE "${CMAKE_CURRENT_BINARY_DIR}/shaders/${FILE_NAME}.spv")
+		set(SPIRV_FILE "${SPIRV_BINARY_OUTPUT_DIR}/${FILE_NAME}.spv")
 		add_custom_command(
 			OUTPUT ${SPIRV_FILE}
-		    COMMAND ${GLSLANG_VALIDATOR} -V -D ${SHADER_FILE} -o ${SPIRV_FILE} -e main
+		    COMMAND ${GLSLANG_VALIDATOR} -V -D "${SHADER_FILE}" -o "${SPIRV_FILE}" -e main            # Compile the hlsl file to spirv
+			COMMAND ${SPIRV_CROSS} "${SPIRV_FILE}" --output "${SPIRV_BINARY_OUTPUT_DIR}/${FILE_NAME}" # Convert the spirv file back to glsl for validation
 		    DEPENDS ${SHADER_FILE})
 		list(APPEND SPIRV_BINARY_FILES ${SPIRV_FILE})
 
