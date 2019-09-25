@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <fstream>
 #include <functional>
 #include <iostream>
 #include <set>
@@ -11,6 +12,24 @@
 
 constexpr int WINDOW_WIDTH  = 800;
 constexpr int WINDOW_HEIGHT = 600;
+
+static std::vector<char> readFile(std::string const& filename)
+{
+    std::ifstream file(filename, std::ios_base::ate | std::ios_base::binary);
+
+    if (!file.is_open())
+    {
+        throw std::runtime_error("failed to open file '" + filename + "'");
+    }
+    
+    size_t fileSize = static_cast<size_t>(file.tellg());
+    std::vector<char> buffer(fileSize);
+
+    file.seekg(0);
+    file.read(buffer.data(), fileSize);
+
+    return buffer;
+}
 
 template<typename Type>
 class MyOptional
@@ -533,7 +552,7 @@ private:
 
         for (auto imageView : m_swapchainImageViews)
         {
-          m_device.destroyImageView(imageView);
+            m_device.destroyImageView(imageView);
         }
 
         m_device.destroySwapchainKHR(m_swapchain);
