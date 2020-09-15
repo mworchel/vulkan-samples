@@ -119,7 +119,7 @@ private:
         vk::ApplicationInfo applicationInfo;
         applicationInfo.pApplicationName   = "Drawing Triangle";
         applicationInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
-        applicationInfo.apiVersion         = VK_API_VERSION_1_1;
+        applicationInfo.apiVersion         = VK_API_VERSION_1_2;
 
         vk::InstanceCreateInfo instanceCreateInfo;
         instanceCreateInfo.pApplicationInfo = &applicationInfo;
@@ -134,7 +134,7 @@ private:
         std::vector<std::string> availableExtensionNames(availableExtensions.size());
         std::transform(std::begin(availableExtensions), std::end(availableExtensions),
                        std::begin(availableExtensionNames),
-                       [](vk::ExtensionProperties const& p) { return p.extensionName; });
+                       [](vk::ExtensionProperties const& p) { return std::string(p.extensionName.data()); });
 
         for (char const* requiredExtension : requiredExtensions)
         {
@@ -173,7 +173,7 @@ private:
         std::vector<std::string> instanceLayers(instanceLayerProperties.size());
         std::transform(std::begin(instanceLayerProperties), std::end(instanceLayerProperties),
                        std::begin(instanceLayers),
-                       [](vk::LayerProperties const& p) { return p.layerName; });
+                       [](vk::LayerProperties const& p) { return std::string(p.layerName.data()); });
 
         return std::all_of(std::begin(requiredLayers), std::end(requiredLayers),
                            [&instanceLayers](char const* requiredLayer) {
@@ -207,7 +207,7 @@ private:
         std::vector<std::string> deviceExtensionNames(deviceExtensions.size());
         std::transform(std::begin(deviceExtensions), std::end(deviceExtensions),
                        std::begin(deviceExtensionNames),
-                       [](vk::ExtensionProperties const& e) { return e.extensionName; });
+                       [](vk::ExtensionProperties const& e) { return std::string(e.extensionName.data()); });
 
         return std::all_of(std::begin(requiredExtensionNames), std::end(requiredExtensionNames),
                            [&deviceExtensionNames](char const* name) { return std::find(std::begin(deviceExtensionNames), std::end(deviceExtensionNames), std::string(name)) != std::end(deviceExtensionNames); });
@@ -231,8 +231,8 @@ private:
 
     void createDebugMessenger()
     {
-        vk::DebugUtilsMessengerCreateInfoEXT createInfo = getDebugMessengerCreateInfo();
-        m_debugMessenger                                = m_instance.createDebugUtilsMessengerEXT(createInfo, nullptr, vk::DispatchLoaderDynamic(m_instance));
+        vk::DebugUtilsMessengerCreateInfoEXT createInfo = getDebugMessengerCreateInfo();        
+        m_debugMessenger                                = m_instance.createDebugUtilsMessengerEXT(createInfo, nullptr, vk::DispatchLoaderDynamic(m_instance, &vkGetInstanceProcAddr));
     }
 
     void createSurface()
@@ -503,7 +503,7 @@ private:
         m_device.destroy();
 
 #if !defined(NDEBUG)
-        m_instance.destroyDebugUtilsMessengerEXT(m_debugMessenger, nullptr, vk::DispatchLoaderDynamic(m_instance));
+        m_instance.destroyDebugUtilsMessengerEXT(m_debugMessenger, nullptr, vk::DispatchLoaderDynamic(m_instance, &vkGetInstanceProcAddr));
 #endif
         m_instance.destroySurfaceKHR(m_surface);
         m_instance.destroy();
