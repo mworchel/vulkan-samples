@@ -123,7 +123,6 @@ private:
 
         vk::InstanceCreateInfo instanceCreateInfo;
         instanceCreateInfo.pApplicationInfo = &applicationInfo;
-
         instanceCreateInfo.ppEnabledLayerNames = requiredLayers.data();
         instanceCreateInfo.enabledLayerCount   = static_cast<uint32_t>(requiredLayers.size());
 
@@ -197,7 +196,7 @@ private:
 
     std::vector<char const*> getRequiredDeviceExtensions()
     {
-        return {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+        return { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
     }
 
     bool checkDeviceExtensionSupport(vk::PhysicalDevice const& device, std::vector<char const*> const& requiredExtensionNames)
@@ -458,7 +457,6 @@ private:
         createInfo.oldSwapchain = nullptr;
 
         m_swapchain = m_device.createSwapchainKHR(createInfo);
-
         m_swapchainImages = m_device.getSwapchainImagesKHR(m_swapchain);
     }
 
