@@ -7,6 +7,7 @@
 #include <fstream>
 #include <functional>
 #include <iostream>
+#include <optional>
 #include <set>
 #include <stdexcept>
 
@@ -31,63 +32,6 @@ static std::vector<char> readFile(std::string const& filename)
     return buffer;
 }
 
-template<typename Type>
-class MyOptional
-{
-public:
-    MyOptional()
-        : m_val()
-        , m_valid(false)
-    {
-    }
-
-    MyOptional(Type&& val)
-        : m_val(std::forward<Type>(val))
-        , m_valid(true)
-    {
-    }
-
-    Type get()
-    {
-        return m_val;
-    }
-
-    bool hasValue()
-    {
-        return m_valid;
-    }
-
-    template<typename Type>
-    MyOptional& operator=(MyOptional<Type> const& other)
-    {
-        if (other.m_valid)
-        {
-            m_val   = other.m_val;
-            m_valid = other.m_valid;
-        }
-        else
-        {
-            m_val   = Type();
-            m_valid = false;
-        }
-
-        return *this;
-    }
-
-    template<typename Type>
-    MyOptional& operator=(Type const& val)
-    {
-        m_val   = val;
-        m_valid = true;
-
-        return *this;
-    }
-
-private:
-    Type m_val;
-    bool m_valid;
-};
-
 static VKAPI_ATTR VkBool32 VKAPI_CALL
 debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT      messageSeverity,
               VkDebugUtilsMessageTypeFlagsEXT             messageTypes,
@@ -106,13 +50,13 @@ debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT      messageSeverity,
 
 struct QueueFamilyIndices
 {
-    MyOptional<uint32_t> graphicsFamily;
-    MyOptional<uint32_t> presentFamily;
+    std::optional<uint32_t> graphicsFamily;
+    std::optional<uint32_t> presentFamily;
 
     bool isComplete()
     {
-        return graphicsFamily.hasValue() &&
-               presentFamily.hasValue();
+        return graphicsFamily.has_value() &&
+               presentFamily.has_value();
     }
 };
 
@@ -427,14 +371,14 @@ private:
     {
         QueueFamilyIndices indices = findQueueFamilies(m_physicalDevice);
 
-        std::set<uint32_t> uniqueQueueFamilies{indices.graphicsFamily.get(), indices.presentFamily.get()};
+        std::set<uint32_t> uniqueQueueFamilies{indices.graphicsFamily.value(), indices.presentFamily.value()};
 
         std::vector<vk::DeviceQueueCreateInfo> queueCreateInfos;
 
         for (uint32_t queueFamily : uniqueQueueFamilies)
         {
             vk::DeviceQueueCreateInfo queueCreateInfo;
-            queueCreateInfo.queueFamilyIndex = indices.graphicsFamily.get();
+            queueCreateInfo.queueFamilyIndex = indices.graphicsFamily.value();
             queueCreateInfo.queueCount       = 1U;
             float priority                   = 1.0f;
             queueCreateInfo.pQueuePriorities = &priority;
@@ -460,8 +404,8 @@ private:
 
         m_device = m_physicalDevice.createDevice(createInfo);
 
-        m_graphicsQueue = m_device.getQueue(indices.graphicsFamily.get(), 0U);
-        m_presentQueue  = m_device.getQueue(indices.presentFamily.get(), 0U);
+        m_graphicsQueue = m_device.getQueue(indices.graphicsFamily.value(), 0U);
+        m_presentQueue  = m_device.getQueue(indices.presentFamily.value(), 0U);
     }
 
     void createSwapChain()
@@ -490,9 +434,9 @@ private:
         createInfo.imageUsage       = vk::ImageUsageFlagBits::eColorAttachment;
 
         QueueFamilyIndices    indices = findQueueFamilies(m_physicalDevice);
-        std::vector<uint32_t> queueFamilyIndices{indices.graphicsFamily.get(), indices.presentFamily.get()};
+        std::vector<uint32_t> queueFamilyIndices{indices.graphicsFamily.value(), indices.presentFamily.value()};
 
-        if (indices.graphicsFamily.get() != indices.presentFamily.get())
+        if (indices.graphicsFamily.value() != indices.presentFamily.value())
         {
             createInfo.imageSharingMode      = vk::SharingMode::eConcurrent;
             createInfo.queueFamilyIndexCount = static_cast<uint32_t>(queueFamilyIndices.size());
