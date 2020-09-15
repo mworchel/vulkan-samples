@@ -111,8 +111,10 @@ private:
     {
         auto requiredLayers = getRequiredLayers();
 
-        if (!checkLayerSupport(requiredLayers))
+        auto missingLayers = checkLayerSupport(requiredLayers);
+        if (!missingLayers.empty())
         {
+            // TODO: Output missing layers
             throw std::runtime_error("layers requested, but not available");
         }
 
@@ -165,7 +167,7 @@ private:
         return layers;
     }
 
-    bool checkLayerSupport(std::vector<const char*> const& requiredLayers)
+    std::vector<std::string> checkLayerSupport(std::vector<const char*> const& requiredLayers)
     {
         auto instanceLayerProperties = vk::enumerateInstanceLayerProperties();
 
@@ -174,10 +176,16 @@ private:
                        std::begin(instanceLayers),
                        [](vk::LayerProperties const& p) { return std::string(p.layerName.data()); });
 
-        return std::all_of(std::begin(requiredLayers), std::end(requiredLayers),
-                           [&instanceLayers](char const* requiredLayer) {
-                               return std::find(std::begin(instanceLayers), std::end(instanceLayers), std::string(requiredLayer)) != std::end(instanceLayers);
-                           });
+        std::vector<std::string> missingLayers;
+        for (auto const& layerName : requiredLayers)
+        {
+            if (std::find(std::begin(instanceLayers), std::end(instanceLayers), std::string(layerName)) == std::end(instanceLayers))
+            {
+                missingLayers.push_back(layerName);
+            }
+        }
+
+        return missingLayers;
     }
 
     std::vector<char const*> getRequiredExtensions()
