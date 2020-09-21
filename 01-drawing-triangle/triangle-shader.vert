@@ -9,7 +9,7 @@ struct VertexInputType
 struct PixelInputType
 {
     float4 position : SV_Position;
-    float3 color : COLOR0;
+    float4 color : COLOR0;
 };
 
 static float2 positions[3] =
@@ -36,7 +36,7 @@ PixelInputType main(VertexInputType input)
     // Change the position vector to be 4 units for proper matrix calculations.
     float2 pos = positions[input.vertexId];
     output.position = float4(pos, 0.0f, 1.0f);
-    output.color = colors[input.vertexId];
+    output.color = float4(colors[input.vertexId], 1.0f);
 
     return output;
 }
