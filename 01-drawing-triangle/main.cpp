@@ -104,7 +104,9 @@ private:
         selectPhysicalDevice();
         createLogicalDevice();
         createSwapChain();
-        createSwapChainImageViews();
+        createImageViews();
+        createRenderPass();
+        createGraphicsPipeline();
     }
 
     void createInstance()
@@ -468,7 +470,7 @@ private:
         m_swapchainImages = m_device.getSwapchainImagesKHR(m_swapchain);
     }
 
-    void createSwapChainImageViews()
+    void createImageViews()
     {
         for (auto const& image : m_swapchainImages)
         {
@@ -476,6 +478,11 @@ private:
             createInfo.image    = image;
             createInfo.format   = m_swapchainImageFormat;
             createInfo.viewType = vk::ImageViewType::e2D;
+
+            createInfo.components.r = vk::ComponentSwizzle::eIdentity;
+            createInfo.components.g = vk::ComponentSwizzle::eIdentity;
+            createInfo.components.b = vk::ComponentSwizzle::eIdentity;
+            createInfo.components.a = vk::ComponentSwizzle::eIdentity;
 
             createInfo.subresourceRange.aspectMask     = vk::ImageAspectFlagBits::eColor;
             createInfo.subresourceRange.baseMipLevel   = 0U;
@@ -485,6 +492,193 @@ private:
 
             m_swapchainImageViews.push_back(m_device.createImageView(createInfo));
         }
+    }
+
+    vk::ShaderModule createShaderModule(const std::vector<char>& code)
+    {
+        vk::ShaderModuleCreateInfo createInfo;
+        createInfo.codeSize = code.size();
+        createInfo.pCode    = reinterpret_cast<const uint32_t*>(code.data());
+
+        return m_device.createShaderModule(createInfo);
+    }
+
+    void createRenderPass()
+    {
+        vk::AttachmentDescription colorAttachment;
+        colorAttachment.format  = m_swapchainImageFormat;
+        colorAttachment.samples = vk::SampleCountFlagBits::e1;
+        // These operations apply to color and depth data
+        colorAttachment.loadOp  = vk::AttachmentLoadOp::eClear;  // What to do with the data in the attachment before rendering...
+        colorAttachment.storeOp = vk::AttachmentStoreOp::eStore; // ...and what to do after rendering.
+        // These operations apply to stencil data
+        colorAttachment.stencilLoadOp  = vk::AttachmentLoadOp::eDontCare;
+        colorAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
+        colorAttachment.initialLayout  = vk::ImageLayout::eUndefined;
+        colorAttachment.finalLayout    = vk::ImageLayout::ePresentSrcKHR;
+        
+        // "The layout specifies which layout we would like the attachment to have during a subpass that uses this reference"
+        vk::AttachmentReference colorAttachmentRef;
+        colorAttachmentRef.attachment = 0;
+        colorAttachmentRef.layout     = vk::ImageLayout::eColorAttachmentOptimal;
+
+        // "Vulkan may also support compute subpasses in the future, so we have to be explicit about this being a graphics subpass"
+        vk::SubpassDescription subpass;
+        subpass.pipelineBindPoint    = vk::PipelineBindPoint::eGraphics;
+        subpass.colorAttachmentCount = 1;
+        subpass.pColorAttachments    = &colorAttachmentRef;
+
+        vk::RenderPassCreateInfo renderPassInfo;
+        renderPassInfo.attachmentCount = 1;
+        renderPassInfo.pAttachments    = &colorAttachment;
+        renderPassInfo.subpassCount    = 1;
+        renderPassInfo.pSubpasses      = &subpass;
+
+        m_renderPass = m_device.createRenderPass(renderPassInfo);
+    }
+
+    void createGraphicsPipeline()
+    {
+        auto vertShaderCode = readFile(PATH_TRIANGLE_SHADER_VERT);
+        auto fragShaderCode = readFile(PATH_TRIANGLE_SHADER_FRAG);
+
+        auto vertShaderModule = createShaderModule(vertShaderCode);
+        auto fragShaderModule = createShaderModule(fragShaderCode);
+
+        vk::PipelineShaderStageCreateInfo vertShaderStageInfo;
+        vertShaderStageInfo.stage = vk::ShaderStageFlagBits::eVertex;
+        vertShaderStageInfo.module = vertShaderModule;
+        vertShaderStageInfo.pName  = "main";
+        // Can be used for specifying/defining constants in the shader code:
+        // vertShaderStageInfo.pSpecializationInfo 
+
+        vk::PipelineShaderStageCreateInfo fragShaderStageInfo;
+        fragShaderStageInfo.stage  = vk::ShaderStageFlagBits::eFragment;
+        fragShaderStageInfo.module = fragShaderModule;
+        fragShaderStageInfo.pName  = "main";
+
+        vk::PipelineShaderStageCreateInfo shaderStages[] = { 
+            vertShaderStageInfo, fragShaderStageInfo
+        };
+
+        vk::PipelineVertexInputStateCreateInfo vertexInputInfo;
+        vertexInputInfo.pVertexBindingDescriptions      = nullptr;
+        vertexInputInfo.vertexBindingDescriptionCount   = 0U;
+        vertexInputInfo.pVertexAttributeDescriptions    = nullptr;
+        vertexInputInfo.vertexAttributeDescriptionCount = 0U;
+
+        vk::PipelineInputAssemblyStateCreateInfo inputAssembly;
+        inputAssembly.topology = vk::PrimitiveTopology::eTriangleList;
+        inputAssembly.primitiveRestartEnable = VK_FALSE;
+
+        vk::Viewport viewport;
+        viewport.x        = 0.f;
+        viewport.y        = 0.f;
+        viewport.width    = static_cast<float>(m_swapchainExtent.width);
+        viewport.height   = static_cast<float>(m_swapchainExtent.height);
+        viewport.minDepth = 0.f;
+        viewport.maxDepth = 1.f;
+
+        vk::Rect2D scissor;
+        scissor.offset = {0, 0};
+        scissor.extent = m_swapchainExtent;
+
+        vk::PipelineViewportStateCreateInfo viewportState;
+        viewportState.viewportCount = 1;
+        viewportState.pViewports    = &viewport;
+        viewportState.scissorCount  = 1;
+        viewportState.pScissors     = &scissor;
+
+        vk::PipelineRasterizationStateCreateInfo rasterizer;
+        // "Using this requires enabling a GPU feature."
+        rasterizer.depthClampEnable = VK_FALSE;
+        // With this flag, geometry never passes through the rasterizer, so there is no output
+        rasterizer.rasterizerDiscardEnable = VK_FALSE;
+        // "Using any mode other than fill requires enabling a GPU feature."
+        rasterizer.polygonMode             = vk::PolygonMode::eFill;
+        // "any line thicker than 1.0f requires you to enable the wideLines GPU feature"
+        rasterizer.lineWidth               = 1.f;
+        rasterizer.cullMode                = vk::CullModeFlagBits::eBack;
+        rasterizer.frontFace               = vk::FrontFace::eClockwise;
+        // "The rasterizer can alter the depth values by adding a constant value 
+        // or biasing them based on a fragment's slope. 
+        // This is sometimes used for shadow mapping, but we won't be using it." 
+        rasterizer.depthBiasEnable         = VK_FALSE;
+        rasterizer.depthBiasConstantFactor = 0.0f;
+        rasterizer.depthBiasClamp          = 0.0f;
+        rasterizer.depthBiasSlopeFactor    = 0.0f;
+
+        // "Enabling it requires enabling a GPU feature."
+        vk::PipelineMultisampleStateCreateInfo multisampling;
+        multisampling.sampleShadingEnable   = VK_FALSE;
+        multisampling.rasterizationSamples  = vk::SampleCountFlagBits::e1;
+        multisampling.minSampleShading      = 1.0f;     // Optional
+        multisampling.pSampleMask           = nullptr;  // Optional
+        multisampling.alphaToCoverageEnable = VK_FALSE; // Optional
+        multisampling.alphaToOneEnable      = VK_FALSE; // Optional
+
+        vk::PipelineColorBlendAttachmentState colorBlendAttachment;
+        colorBlendAttachment.colorWriteMask      = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
+        colorBlendAttachment.blendEnable         = VK_FALSE;
+        colorBlendAttachment.srcColorBlendFactor = vk::BlendFactor::eOne;  // Optional
+        colorBlendAttachment.dstColorBlendFactor = vk::BlendFactor::eZero; // Optional
+        colorBlendAttachment.colorBlendOp        = vk::BlendOp::eAdd;      // Optional
+        colorBlendAttachment.srcAlphaBlendFactor = vk::BlendFactor::eOne;  // Optional
+        colorBlendAttachment.dstAlphaBlendFactor = vk::BlendFactor::eZero; // Optional
+        colorBlendAttachment.alphaBlendOp        = vk::BlendOp::eAdd;      // Optional
+
+        vk::PipelineColorBlendStateCreateInfo colorBlending;
+        colorBlending.logicOpEnable     = VK_FALSE;
+        colorBlending.logicOp           = vk::LogicOp::eCopy;
+        colorBlending.attachmentCount   = 1;
+        colorBlending.pAttachments      = &colorBlendAttachment;
+        colorBlending.blendConstants[0] = 0.0f; // Optional
+        colorBlending.blendConstants[1] = 0.0f; // Optional
+        colorBlending.blendConstants[2] = 0.0f; // Optional
+        colorBlending.blendConstants[3] = 0.0f; // Optional
+
+        vk::DynamicState dynamicStates[] = {
+            vk::DynamicState::eViewport,
+            vk::DynamicState::eLineWidth
+        };
+
+        vk::PipelineDynamicStateCreateInfo dynamicState{};
+        dynamicState.dynamicStateCount = 2;
+        dynamicState.pDynamicStates    = dynamicStates;
+
+        vk::PipelineLayoutCreateInfo pipelineLayoutInfo;
+        pipelineLayoutInfo.setLayoutCount         = 0;
+        pipelineLayoutInfo.pSetLayouts            = nullptr; // Optional
+        pipelineLayoutInfo.pushConstantRangeCount = 0;       // Optional
+        pipelineLayoutInfo.pPushConstantRanges    = nullptr; // Optional
+
+        m_pipelineLayout = m_device.createPipelineLayout(pipelineLayoutInfo);
+
+        vk::GraphicsPipelineCreateInfo pipelineInfo;
+        // Dynamic parts
+        pipelineInfo.stageCount = 2;
+        pipelineInfo.pStages    = shaderStages;
+        // Fixed function parts
+        pipelineInfo.pVertexInputState   = &vertexInputInfo;
+        pipelineInfo.pInputAssemblyState = &inputAssembly;
+        pipelineInfo.pViewportState      = &viewportState;
+        pipelineInfo.pRasterizationState = &rasterizer;
+        pipelineInfo.pMultisampleState   = &multisampling;
+        pipelineInfo.pDepthStencilState  = nullptr;
+        pipelineInfo.pColorBlendState    = &colorBlending;
+        pipelineInfo.pDynamicState       = nullptr;
+        pipelineInfo.layout              = m_pipelineLayout;
+        pipelineInfo.renderPass          = m_renderPass;
+        pipelineInfo.subpass             = 0;
+        // "Vulkan allows you to create a new graphics pipeline by deriving from an existing pipeline."
+        // "These values are only used if the VK_PIPELINE_CREATE_DERIVATIVE_BIT flag is also specified in the flags field."
+        pipelineInfo.basePipelineHandle  = vk::Pipeline(); // Optional
+        pipelineInfo.basePipelineIndex   = -1;             // Optional
+
+        m_graphicsPipeline = m_device.createGraphicsPipelines(vk::PipelineCache(), { pipelineInfo }).value[0];
+
+        m_device.destroyShaderModule(vertShaderModule);
+        m_device.destroyShaderModule(fragShaderModule);
     }
 
     void mainLoop()
@@ -505,6 +699,9 @@ private:
             m_device.destroyImageView(imageView);
         }
 
+        m_device.destroyPipeline(m_graphicsPipeline);
+        m_device.destroyPipelineLayout(m_pipelineLayout);
+        m_device.destroyRenderPass(m_renderPass);
         m_device.destroySwapchainKHR(m_swapchain);
         m_device.destroy();
 
@@ -530,6 +727,9 @@ private:
     vk::Extent2D               m_swapchainExtent;
     std::vector<vk::Image>     m_swapchainImages;
     std::vector<vk::ImageView> m_swapchainImageViews;
+    vk::RenderPass             m_renderPass;
+    vk::PipelineLayout         m_pipelineLayout;
+    vk::Pipeline               m_graphicsPipeline;
 };
 
 int main()
