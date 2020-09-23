@@ -108,6 +108,8 @@ private:
         createRenderPass();
         createGraphicsPipeline();
         createFramebuffers();
+        createCommandPool();
+        createCommandBuffers();
     }
 
     void createInstance()
@@ -704,6 +706,58 @@ private:
         }
     }
 
+    void createCommandPool()
+    {
+        auto queueFamilyIndices = findQueueFamilies(m_physicalDevice);
+
+        vk::CommandPoolCreateInfo poolInfo;
+        poolInfo.queueFamilyIndex = queueFamilyIndices.graphicsFamily.value();
+        poolInfo.flags            = vk::CommandPoolCreateFlags();               // Optional
+
+        m_commandPool = m_device.createCommandPool(poolInfo);
+    }
+
+    void createCommandBuffers()
+    {
+        vk::CommandBufferAllocateInfo allocInfo;
+        allocInfo.commandPool        = m_commandPool;
+        // Primary command buffers can be submitted to a queue
+        // but not executed from other command buffers.
+        // For secondary ones it's the other way around.
+        allocInfo.level              = vk::CommandBufferLevel::ePrimary;
+        allocInfo.commandBufferCount = m_swapchainFramebuffers.size();
+
+        m_commandBuffers = m_device.allocateCommandBuffers(allocInfo);
+
+        for (size_t i = 0; i < m_commandBuffers.size(); i++)
+        {
+            vk::CommandBufferBeginInfo beginInfo;
+            beginInfo.flags            = vk::CommandBufferUsageFlags();
+            beginInfo.pInheritanceInfo = nullptr;
+
+            // "If the command buffer was already recorded once, 
+            // then a call to vkBeginCommandBuffer will implicitly reset it".
+            m_commandBuffers[i].begin(beginInfo);
+
+            vk::RenderPassBeginInfo renderPassInfo;
+            renderPassInfo.renderPass        = m_renderPass;
+            renderPassInfo.framebuffer       = m_swapchainFramebuffers[i];
+            renderPassInfo.renderArea.offset = {0, 0};
+            renderPassInfo.renderArea.extent = m_swapchainExtent; 
+
+            vk::ClearValue clearColor      = std::array<float, 4>({0.0f, 0.0f, 0.0f, 1.0f});
+            renderPassInfo.clearValueCount = 1;
+            renderPassInfo.pClearValues    = &clearColor;
+
+            m_commandBuffers[i].beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
+            m_commandBuffers[i].bindPipeline(vk::PipelineBindPoint::eGraphics, m_graphicsPipeline);
+            m_commandBuffers[i].draw(3, 1, 0, 0);
+            m_commandBuffers[i].endRenderPass();
+
+            m_commandBuffers[i].end();
+        }
+    }
+
     void mainLoop()
     {
         while (!glfwWindowShouldClose(m_window))
@@ -716,6 +770,8 @@ private:
     {
         glfwDestroyWindow(m_window);
         glfwTerminate();
+
+        m_device.destroyCommandPool(m_commandPool);
 
         for (auto framebuffer : m_swapchainFramebuffers)
         {
@@ -745,20 +801,22 @@ private:
 #if !defined(NDEBUG)
     vk::DebugUtilsMessengerEXT m_debugMessenger;
 #endif
-    vk::SurfaceKHR               m_surface;
-    vk::PhysicalDevice           m_physicalDevice;
-    vk::Device                   m_device;
-    vk::Queue                    m_graphicsQueue;
-    vk::Queue                    m_presentQueue;
-    vk::SwapchainKHR             m_swapchain;
-    vk::Format                   m_swapchainImageFormat;
-    vk::Extent2D                 m_swapchainExtent;
-    std::vector<vk::Image>       m_swapchainImages;
-    std::vector<vk::ImageView>   m_swapchainImageViews;
-    vk::RenderPass               m_renderPass;
-    vk::PipelineLayout           m_pipelineLayout;
-    vk::Pipeline                 m_graphicsPipeline;
-    std::vector<vk::Framebuffer> m_swapchainFramebuffers;
+    vk::SurfaceKHR                 m_surface;
+    vk::PhysicalDevice             m_physicalDevice;
+    vk::Device                     m_device;
+    vk::Queue                      m_graphicsQueue;
+    vk::Queue                      m_presentQueue;
+    vk::SwapchainKHR               m_swapchain;
+    vk::Format                     m_swapchainImageFormat;
+    vk::Extent2D                   m_swapchainExtent;
+    std::vector<vk::Image>         m_swapchainImages;
+    std::vector<vk::ImageView>     m_swapchainImageViews;
+    vk::RenderPass                 m_renderPass;
+    vk::PipelineLayout             m_pipelineLayout;
+    vk::Pipeline                   m_graphicsPipeline;
+    std::vector<vk::Framebuffer>   m_swapchainFramebuffers;
+    vk::CommandPool                m_commandPool;
+    std::vector<vk::CommandBuffer> m_commandBuffers;
 };
 
 int main()
