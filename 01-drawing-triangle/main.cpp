@@ -107,6 +107,7 @@ private:
         createImageViews();
         createRenderPass();
         createGraphicsPipeline();
+        createFramebuffers();
     }
 
     void createInstance()
@@ -681,6 +682,28 @@ private:
         m_device.destroyShaderModule(fragShaderModule);
     }
 
+    void createFramebuffers()
+    {
+        m_swapchainFramebuffers.resize(m_swapchainImageViews.size());
+
+        for (size_t i = 0; i < m_swapchainImageViews.size(); ++i)
+        {
+            vk::ImageView attachments[] = {m_swapchainImageViews[i]};
+
+            // A framebuffer object wraps all the attachments.
+            // Therefore, it has to be bound to a render pass that is compatible (expects compatible attachments).
+            vk::FramebufferCreateInfo framebufferInfo;
+            framebufferInfo.renderPass      = m_renderPass;
+            framebufferInfo.attachmentCount = 1;
+            framebufferInfo.pAttachments    = attachments;
+            framebufferInfo.width           = m_swapchainExtent.width;
+            framebufferInfo.height          = m_swapchainExtent.height;
+            framebufferInfo.layers          = 1;
+
+            m_swapchainFramebuffers[i] = m_device.createFramebuffer(framebufferInfo);
+        }
+    }
+
     void mainLoop()
     {
         while (!glfwWindowShouldClose(m_window))
@@ -693,6 +716,11 @@ private:
     {
         glfwDestroyWindow(m_window);
         glfwTerminate();
+
+        for (auto framebuffer : m_swapchainFramebuffers)
+        {
+            m_device.destroyFramebuffer(framebuffer);
+        }
 
         for (auto imageView : m_swapchainImageViews)
         {
@@ -717,19 +745,20 @@ private:
 #if !defined(NDEBUG)
     vk::DebugUtilsMessengerEXT m_debugMessenger;
 #endif
-    vk::SurfaceKHR             m_surface;
-    vk::PhysicalDevice         m_physicalDevice;
-    vk::Device                 m_device;
-    vk::Queue                  m_graphicsQueue;
-    vk::Queue                  m_presentQueue;
-    vk::SwapchainKHR           m_swapchain;
-    vk::Format                 m_swapchainImageFormat;
-    vk::Extent2D               m_swapchainExtent;
-    std::vector<vk::Image>     m_swapchainImages;
-    std::vector<vk::ImageView> m_swapchainImageViews;
-    vk::RenderPass             m_renderPass;
-    vk::PipelineLayout         m_pipelineLayout;
-    vk::Pipeline               m_graphicsPipeline;
+    vk::SurfaceKHR               m_surface;
+    vk::PhysicalDevice           m_physicalDevice;
+    vk::Device                   m_device;
+    vk::Queue                    m_graphicsQueue;
+    vk::Queue                    m_presentQueue;
+    vk::SwapchainKHR             m_swapchain;
+    vk::Format                   m_swapchainImageFormat;
+    vk::Extent2D                 m_swapchainExtent;
+    std::vector<vk::Image>       m_swapchainImages;
+    std::vector<vk::ImageView>   m_swapchainImageViews;
+    vk::RenderPass               m_renderPass;
+    vk::PipelineLayout           m_pipelineLayout;
+    vk::Pipeline                 m_graphicsPipeline;
+    std::vector<vk::Framebuffer> m_swapchainFramebuffers;
 };
 
 int main()
