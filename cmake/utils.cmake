@@ -1,4 +1,6 @@
 function(add_shader_compile_target TARGET_NAME SHADER_FILES)
+	# Losely inspired by https://gist.github.com/evilactually/a0d191701cb48f157b05be7f74d79396
+
 	set(GLSLANG_VALIDATOR "glslangValidator")
 	set(SPIRV_CROSS "spirv-cross")
 
@@ -32,6 +34,10 @@ function(add_shader_compile_target TARGET_NAME SHADER_FILES)
 
 	add_dependencies(${TARGET_NAME} ${TARGET_NAME}-shaders)
 
+	# We add definitions for each compiled shader to the target,
+	# so they can be referenced from within the code.
+	# For a shader file named 'triangle-shader.vert' the
+	# corresponding definition is 'PATH_TRIANGLE_SHADER_VERT'
 	foreach(SHADER_COMPILE_DEFINITION ${SHADER_COMPILE_DEFINITIONS})
 		target_compile_definitions(${TARGET_NAME} PRIVATE ${SHADER_COMPILE_DEFINITION})
 	endforeach(SHADER_COMPILE_DEFINITION)
