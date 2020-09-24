@@ -110,6 +110,7 @@ private:
         createFramebuffers();
         createCommandPool();
         createCommandBuffers();
+        createSemaphores();
     }
 
     void createInstance()
@@ -537,6 +538,17 @@ private:
         renderPassInfo.subpassCount    = 1;
         renderPassInfo.pSubpasses      = &subpass;
 
+        vk::SubpassDependency dependency;
+        dependency.srcSubpass    = VK_SUBPASS_EXTERNAL;
+        dependency.dstSubpass    = 0;
+        dependency.srcStageMask  = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+        dependency.srcAccessMask = vk::AccessFlags();
+        dependency.dstStageMask  = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+        dependency.dstAccessMask = vk::AccessFlagBits::eColorAttachmentWrite;
+
+        renderPassInfo.dependencyCount = 1;
+        renderPassInfo.pDependencies   = &dependency;
+
         m_renderPass = m_device.createRenderPass(renderPassInfo);
     }
 
@@ -758,18 +770,68 @@ private:
         }
     }
 
+    void createSemaphores()
+    {
+        vk::SemaphoreCreateInfo semaphoreInfo;
+
+        m_imageAvailableSemaphore = m_device.createSemaphore(semaphoreInfo);
+        m_renderFinishedSemaphore = m_device.createSemaphore(semaphoreInfo);
+    }
+
     void mainLoop()
     {
         while (!glfwWindowShouldClose(m_window))
         {
             glfwPollEvents();
+            drawFrame();
         }
+
+        m_device.waitIdle();
+    }
+
+    void drawFrame()
+    {
+        uint32_t imageIndex = m_device.acquireNextImageKHR(m_swapchain, UINT64_MAX, m_imageAvailableSemaphore, vk::Fence());
+
+        vk::SubmitInfo submitInfo;
+
+        // "Each entry in the waitStages array corresponds to the semaphore with the same index in pWaitSemaphores."
+        vk::Semaphore          waitSemaphores[] = {m_imageAvailableSemaphore};
+        vk::PipelineStageFlags waitStages[]     = {vk::PipelineStageFlagBits::eColorAttachmentOutput};
+        submitInfo.waitSemaphoreCount           = 1;
+        submitInfo.pWaitSemaphores              = waitSemaphores;
+        submitInfo.pWaitDstStageMask            = waitStages;
+
+        submitInfo.commandBufferCount = 1;
+        submitInfo.pCommandBuffers    = &m_commandBuffers[imageIndex];
+
+        vk::Semaphore signalSemaphores[] = {m_renderFinishedSemaphore};
+        submitInfo.signalSemaphoreCount  = 1;
+        submitInfo.pSignalSemaphores     = signalSemaphores;
+
+        m_graphicsQueue.submit(1, &submitInfo, vk::Fence());
+
+        vk::PresentInfoKHR presentInfo;
+        presentInfo.waitSemaphoreCount = 1;
+        presentInfo.pWaitSemaphores    = signalSemaphores;
+
+        vk::SwapchainKHR swapchains[] = {m_swapchain};
+        presentInfo.swapchainCount    = 1;
+        presentInfo.pSwapchains       = swapchains;
+        presentInfo.pImageIndices     = &imageIndex;
+        
+        presentInfo.pResults = nullptr;
+
+        m_presentQueue.presentKHR(presentInfo);
     }
 
     void uninitialize()
     {
         glfwDestroyWindow(m_window);
         glfwTerminate();
+
+        m_device.destroySemaphore(m_imageAvailableSemaphore);
+        m_device.destroySemaphore(m_renderFinishedSemaphore);
 
         m_device.destroyCommandPool(m_commandPool);
 
@@ -817,6 +879,8 @@ private:
     std::vector<vk::Framebuffer>   m_swapchainFramebuffers;
     vk::CommandPool                m_commandPool;
     std::vector<vk::CommandBuffer> m_commandBuffers;
+    vk::Semaphore                  m_imageAvailableSemaphore;
+    vk::Semaphore                  m_renderFinishedSemaphore;
 };
 
 int main()
