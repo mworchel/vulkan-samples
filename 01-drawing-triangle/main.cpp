@@ -11,8 +11,9 @@
 #include <set>
 #include <stdexcept>
 
-constexpr int WINDOW_WIDTH  = 800;
-constexpr int WINDOW_HEIGHT = 600;
+constexpr int WINDOW_WIDTH         = 800;
+constexpr int WINDOW_HEIGHT        = 600;
+constexpr int MAX_FRAMES_IN_FLIGHT = 2;
 
 static std::vector<char> readFile(std::string const& filename)
 {
@@ -110,7 +111,7 @@ private:
         createFramebuffers();
         createCommandPool();
         createCommandBuffers();
-        createSemaphores();
+        createSyncObjects();
     }
 
     void createInstance()
@@ -770,12 +771,24 @@ private:
         }
     }
 
-    void createSemaphores()
+    void createSyncObjects()
     {
-        vk::SemaphoreCreateInfo semaphoreInfo;
+        m_imageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
+        m_renderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
+        m_inFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
+        m_imagesInFlight.resize(m_swapchainImages.size());
 
-        m_imageAvailableSemaphore = m_device.createSemaphore(semaphoreInfo);
-        m_renderFinishedSemaphore = m_device.createSemaphore(semaphoreInfo);
+        vk::SemaphoreCreateInfo semaphoreInfo;
+        vk::FenceCreateInfo     fenceInfo;
+        fenceInfo.flags = vk::FenceCreateFlagBits::eSignaled;
+
+        for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
+        {
+            m_imageAvailableSemaphores[i] = m_device.createSemaphore(semaphoreInfo);
+            m_renderFinishedSemaphores[i] = m_device.createSemaphore(semaphoreInfo);   
+            m_inFlightFences[i]           = m_device.createFence(fenceInfo);
+        }
+
     }
 
     void mainLoop()
@@ -791,12 +804,23 @@ private:
 
     void drawFrame()
     {
-        uint32_t imageIndex = m_device.acquireNextImageKHR(m_swapchain, UINT64_MAX, m_imageAvailableSemaphore, vk::Fence());
+        m_device.waitForFences(1, &m_inFlightFences[m_currentFrame], VK_TRUE, UINT64_MAX);
+
+        uint32_t imageIndex = m_device.acquireNextImageKHR(m_swapchain, UINT64_MAX, m_imageAvailableSemaphores[m_currentFrame], vk::Fence());
+
+        // Check if a previous frame is using this image (i.e. there is its fence to wait on)
+        if (m_imagesInFlight[imageIndex])
+        {
+            m_device.waitForFences(1, &m_imagesInFlight[imageIndex], VK_TRUE, UINT64_MAX);
+        }
+
+        // Mark the image as now being in use by this frame
+        m_imagesInFlight[imageIndex] = m_inFlightFences[m_currentFrame];
 
         vk::SubmitInfo submitInfo;
 
         // "Each entry in the waitStages array corresponds to the semaphore with the same index in pWaitSemaphores."
-        vk::Semaphore          waitSemaphores[] = {m_imageAvailableSemaphore};
+        vk::Semaphore          waitSemaphores[] = {m_imageAvailableSemaphores[m_currentFrame]};
         vk::PipelineStageFlags waitStages[]     = {vk::PipelineStageFlagBits::eColorAttachmentOutput};
         submitInfo.waitSemaphoreCount           = 1;
         submitInfo.pWaitSemaphores              = waitSemaphores;
@@ -805,11 +829,12 @@ private:
         submitInfo.commandBufferCount = 1;
         submitInfo.pCommandBuffers    = &m_commandBuffers[imageIndex];
 
-        vk::Semaphore signalSemaphores[] = {m_renderFinishedSemaphore};
+        vk::Semaphore signalSemaphores[] = {m_renderFinishedSemaphores[m_currentFrame]};
         submitInfo.signalSemaphoreCount  = 1;
         submitInfo.pSignalSemaphores     = signalSemaphores;
 
-        m_graphicsQueue.submit(1, &submitInfo, vk::Fence());
+        m_device.resetFences(1, &m_inFlightFences[m_currentFrame]);
+        m_graphicsQueue.submit(1, &submitInfo, m_inFlightFences[m_currentFrame]);
 
         vk::PresentInfoKHR presentInfo;
         presentInfo.waitSemaphoreCount = 1;
@@ -823,6 +848,8 @@ private:
         presentInfo.pResults = nullptr;
 
         m_presentQueue.presentKHR(presentInfo);
+
+        m_currentFrame = (m_currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
     }
 
     void uninitialize()
@@ -830,8 +857,12 @@ private:
         glfwDestroyWindow(m_window);
         glfwTerminate();
 
-        m_device.destroySemaphore(m_imageAvailableSemaphore);
-        m_device.destroySemaphore(m_renderFinishedSemaphore);
+        for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
+        {
+            m_device.destroySemaphore(m_imageAvailableSemaphores[i]);
+            m_device.destroySemaphore(m_renderFinishedSemaphores[i]);
+            m_device.destroyFence(m_inFlightFences[i]);
+        }
 
         m_device.destroyCommandPool(m_commandPool);
 
@@ -879,8 +910,11 @@ private:
     std::vector<vk::Framebuffer>   m_swapchainFramebuffers;
     vk::CommandPool                m_commandPool;
     std::vector<vk::CommandBuffer> m_commandBuffers;
-    vk::Semaphore                  m_imageAvailableSemaphore;
-    vk::Semaphore                  m_renderFinishedSemaphore;
+    std::vector<vk::Semaphore>     m_imageAvailableSemaphores;
+    std::vector<vk::Semaphore>     m_renderFinishedSemaphores;
+    std::vector<vk::Fence>         m_inFlightFences;
+    std::vector<vk::Fence>         m_imagesInFlight;
+    size_t                         m_currentFrame = 0;
 };
 
 int main()
