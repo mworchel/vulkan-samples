@@ -541,9 +541,9 @@ private:
 
         vk::SubpassDependency dependency;
         dependency.srcSubpass    = VK_SUBPASS_EXTERNAL;
-        dependency.dstSubpass    = 0;
         dependency.srcStageMask  = vk::PipelineStageFlagBits::eColorAttachmentOutput;
         dependency.srcAccessMask = vk::AccessFlags();
+        dependency.dstSubpass    = 0;
         dependency.dstStageMask  = vk::PipelineStageFlagBits::eColorAttachmentOutput;
         dependency.dstAccessMask = vk::AccessFlagBits::eColorAttachmentWrite;
 
@@ -804,14 +804,18 @@ private:
 
     void drawFrame()
     {
-        m_device.waitForFences(1, &m_inFlightFences[m_currentFrame], VK_TRUE, UINT64_MAX);
+        // Wait until a previous draw call finished using this frame id
+        m_device.waitForFences({m_inFlightFences[m_currentFrame]}, VK_TRUE, UINT64_MAX);
 
+        // Get the next available swap chain image and a semaphore that signals 
+        // when the device has finished writing to it
         uint32_t imageIndex = m_device.acquireNextImageKHR(m_swapchain, UINT64_MAX, m_imageAvailableSemaphores[m_currentFrame], vk::Fence());
 
-        // Check if a previous frame is using this image (i.e. there is its fence to wait on)
+        // Check if a previous frame (not equal to the current frame id) 
+        // is using this image and wait for its draw call to finish
         if (m_imagesInFlight[imageIndex])
         {
-            m_device.waitForFences(1, &m_imagesInFlight[imageIndex], VK_TRUE, UINT64_MAX);
+            m_device.waitForFences({m_imagesInFlight[imageIndex]}, VK_TRUE, UINT64_MAX);
         }
 
         // Mark the image as now being in use by this frame
@@ -833,8 +837,10 @@ private:
         submitInfo.signalSemaphoreCount  = 1;
         submitInfo.pSignalSemaphores     = signalSemaphores;
 
+        // Reset the fence for this frame and make sure 
+        // it is signalled after the queue finishes
         m_device.resetFences(1, &m_inFlightFences[m_currentFrame]);
-        m_graphicsQueue.submit(1, &submitInfo, m_inFlightFences[m_currentFrame]);
+        m_graphicsQueue.submit({submitInfo}, m_inFlightFences[m_currentFrame]);
 
         vk::PresentInfoKHR presentInfo;
         presentInfo.waitSemaphoreCount = 1;
@@ -844,7 +850,6 @@ private:
         presentInfo.swapchainCount    = 1;
         presentInfo.pSwapchains       = swapchains;
         presentInfo.pImageIndices     = &imageIndex;
-        
         presentInfo.pResults = nullptr;
 
         m_presentQueue.presentKHR(presentInfo);
